@@ -339,7 +339,6 @@ scheduler(void)
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
-#ifndef CS333_P3P4
 void
 sched(void)
 {
@@ -357,13 +356,6 @@ sched(void)
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
-#else
-void
-sched(void)
-{
-
-}
-#endif
 
 // Give up the CPU for one scheduling round.
 void
