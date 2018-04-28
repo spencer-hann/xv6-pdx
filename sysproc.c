@@ -93,3 +93,81 @@ sys_halt(void){
   return 0;
 }
 
+#ifdef CS333_P1
+int
+sys_date(void)
+{
+  struct rtcdate* d;
+
+  if (argptr(0, (void*)&d, sizeof(struct rtcdate)) < 0)
+    return -1;
+
+  cmostime(d);
+
+  return 0;
+}
+#endif
+
+#ifdef CS333_P2
+int
+sys_getuid(void)
+{
+  return proc->uid;
+}
+
+int
+sys_getgid(void)
+{
+  return proc->gid;
+}
+
+int
+sys_getppid(void)
+{
+  return proc->parent->pid;
+}
+
+int 
+sys_setuid(void)
+{
+  int x;
+
+  if(argint(0, &x) < 0)
+    return -1;
+
+  if (x < 0 || x > 32767) return -1;
+  proc->uid = x;
+
+  return 0;
+}
+
+int
+sys_setgid(void)
+{
+  int x;
+
+  if(argint(0, &x) < 0)
+    return -1;
+
+  if (x < 0 || x > 32767) return -1;
+  proc->gid = x;
+
+  return 0;
+}
+
+int
+sys_getprocs(void)
+{
+  int max;
+  struct uproc* table;
+
+  if(argint(0, &max) < 0)
+    return -1;
+  
+  if (argptr(1, (void*)&table, sizeof(struct uproc)) < 0)
+    return -1;
+
+  return getprocs(max,table);
+}
+
+#endif //CS33_P2

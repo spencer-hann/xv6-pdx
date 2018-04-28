@@ -1,3 +1,5 @@
+#include "uproc.h"
+
 struct buf;
 struct context;
 struct file;
@@ -110,6 +112,12 @@ int             fork(void);
 int             growproc(int);
 int             kill(int);
 void            pinit(void);
+#ifdef CS333_P1
+void            print_millisec(uint);
+#endif
+#ifdef CS333_P2
+int             getprocs(uint, struct uproc*);
+#endif
 void            procdump(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);

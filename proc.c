@@ -78,6 +78,15 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+//student added
+  #ifdef CS333_P1
+  p->start_ticks = ticks;
+  #endif
+  #ifdef CS333_P2
+  p->cpu_ticks_total = 0;
+  p->cpu_ticks_in = 0;
+  #endif
+
   return p;
 }
 
@@ -108,6 +117,12 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+
+  #ifdef CS333_P2
+  p->parent = 0;
+  p->uid = DEFAULT_UID;
+  p->gid = DEFAULT_GID;
+  #endif
 }
 
 // Grow current process's memory by n bytes.
@@ -165,6 +180,10 @@ fork(void)
   safestrcpy(np->name, proc->name, sizeof(proc->name));
 
   pid = np->pid;
+  #ifdef CS333_P2
+  np->uid = proc->uid;
+  np->gid = proc->gid;
+  #endif
 
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);
@@ -313,6 +332,9 @@ scheduler(void)
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      #ifdef CS333_P2
+      p->cpu_ticks_in = ticks;
+      #endif
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
 
@@ -353,6 +375,9 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = cpu->intena;
+  #ifdef CS333_P2
+  proc->cpu_ticks_total += ticks - proc->cpu_ticks_in;
+  #endif
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
@@ -499,6 +524,63 @@ static char *states[] = {
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
+#ifdef CS333_P1
+void
+print_millisec(uint millisec)
+{
+  cprintf("%d.", millisec /1000);
+
+  millisec %= 1000;
+  if (millisec < 100)
+    cprintf("0");
+  if (millisec < 10)
+    cprintf("0");
+
+  cprintf("%d\t", millisec);
+}
+#endif
+
+#ifdef CS333_P2
+int
+getprocs(uint max, struct uproc* table)
+{
+  int num_uprocs;
+  struct proc* begin, * end;
+  if (!table || max < 1)
+    return -1;
+
+  acquire(&ptable.lock);
+
+  begin = ptable.proc;
+  end = ptable.proc + NPROC;
+  num_uprocs = 0;
+
+  while (begin < end && num_uprocs < max) {
+    if (begin->state == EMBRYO || begin->state == UNUSED) {
+      ++begin;
+      continue;
+    }
+    table->pid = begin->pid;
+    table->uid = begin->uid;
+    table->gid = begin->gid;
+    table->ppid = (begin->parent) ? begin->parent->pid : begin->pid;
+    table->elapsed_ticks = ticks - begin->start_ticks;
+    table->CPU_total_ticks = begin->cpu_ticks_total;
+    if(begin->state >= 0 && begin->state < NELEM(states) && states[begin->state])
+      safestrcpy(table->state, states[begin->state], sizeof(table->name));
+    else
+      safestrcpy(table->state, "???", sizeof(table->name));
+      //table->state = "???";
+    table->size = begin->sz;
+    safestrcpy(table->name, begin->name, sizeof(table->name));
+    ++begin; ++table; ++num_uprocs;
+  }
+  release(&ptable.lock);
+
+  return num_uprocs;
+}
+#endif
+
 void
 procdump(void)
 {
@@ -506,6 +588,13 @@ procdump(void)
   struct proc *p;
   char *state;
   uint pc[10];
+  uint ppid;
+
+  #ifdef CS333_P2
+  cprintf("\nPID\tName\tUID\tGID\tPPID\tElapsed\tCPU\tState\tSize\t PCs\n");
+  #elif defined(CS333_P1)
+  cprintf("\nPID\tState\tName\tElapsed\t PCs\n");
+  #endif
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
@@ -514,7 +603,26 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+
+    #ifndef CS333_P1 
+    cprintf("%d\t%s\t%s\t", p->pid, state, p->name);
+    #endif
+    #ifdef CS333_P1
+        #ifdef CS333_P2
+          ppid = p->parent ? p->parent->pid : p->pid;
+          cprintf("%d\t%s\t%d\t%d\t%d\t", 
+              p->pid, p->name, p->uid, p->gid, ppid);
+        #else
+          cprintf("%d\t%s\t%s\t", p->pid, state, p->name);
+        #endif
+    // display elapsed time
+      print_millisec(ticks - p->start_ticks);
+        #ifdef CS333_P2
+          print_millisec(p->cpu_ticks_total);
+          cprintf("%s\t%d\t",state,p->sz);
+        #endif // CS333_P2
+    #endif // CS333_p1
+
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
