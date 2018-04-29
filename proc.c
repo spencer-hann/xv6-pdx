@@ -7,9 +7,29 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#ifdef CS333_P3P4
+struct StateLists {
+  struct proc * ready = 0;
+  struct proc * readyTail = 0;
+  struct proc * free = 0;
+  struct proc * freeTail = 0;
+  struct proc * sleep = 0;
+  struct proc * sleepTail = 0;
+  struct proc * zombie = 0;
+  struct proc * zombieTail = 0;
+  struct proc * running = 0;
+  struct proc * runningTail = 0;
+  struct proc * embryo = 0;
+  struct proc * embryoTail = 0;
+};
+#endif
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  #ifdef CS333_P3P4
+  struct StateLists pLists;
+  #endif
 } ptable;
 
 static struct proc *initproc;
@@ -722,4 +742,4 @@ initFreeList(void) {
     stateListAdd(&ptable.pLists.free, &ptable.pLists.freeTail, p);
   }
 }
-#endif
+#endif // CS333_P3P4
