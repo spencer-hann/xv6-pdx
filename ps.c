@@ -2,7 +2,7 @@
 #include "types.h"
 #include "user.h"
 
-#define UPROCS_MAX 16 // 1 16 64 72
+#define UPROCS_MAX 64 // 1 16 64 72
 
 int
 main(void)
@@ -10,6 +10,11 @@ main(void)
   int millisec, num_uprocs,  max = UPROCS_MAX;
   struct uproc* table = malloc(sizeof(struct uproc) * max);
   struct uproc *begin, *end;
+
+  if (!table) {
+    printf(2, "malloc failed in ps.c\n\n");
+    exit();
+  }
   
   num_uprocs = getprocs(max, table);
 
