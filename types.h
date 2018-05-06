@@ -6,4 +6,3 @@ typedef uint pde_t;
 // must be here to be visible to user space (hack)
 #define TPS 1000
 #define SCHED_INTERVAL (TPS/100)
-

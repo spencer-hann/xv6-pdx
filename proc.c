@@ -48,7 +48,16 @@ static int stateListAdd(struct proc** head, struct proc** tail, struct proc* p);
 static int stateListRemove(struct proc** head, struct proc** tail, struct proc* p);
 static void statelist_move_from_to(enum procstate, enum procstate, struct proc*);
 static void get_head_tail(struct proc***, struct proc***, enum procstate);
-static void assertState(struct proc*, enum procstate);
+static void assertState(struct proc* p, enum procstate state);
+static struct proc* statelist_search(int pid);
+static struct proc* list_search(int pid, enum procstate state);
+static void statelist_abandon_children(struct proc* p);
+static void list_abandon_children(struct proc* parent, enum procstate state);
+void display_readylist();
+void display_freelist();
+void display_sleeplist();
+void display_zombielist();
+static void list_display(struct proc*);
 #endif
 
 void
@@ -304,7 +313,40 @@ exit(void)
 void
 exit(void)
 {
+  //struct proc *p;
+  int fd;
 
+  if(proc == initproc)
+    panic("init exiting");
+
+  // Close all open files.
+  for(fd = 0; fd < NOFILE; fd++){
+    if(proc->ofile[fd]){
+      fileclose(proc->ofile[fd]);
+      proc->ofile[fd] = 0;
+    }
+  }
+
+  begin_op();
+  iput(proc->cwd);
+  end_op();
+  proc->cwd = 0;
+
+  acquire(&ptable.lock);
+
+  // Parent might be sleeping in wait().
+  wakeup1(proc->parent);
+
+  // Pass abandoned children to init.
+  statelist_abandon_children(proc);
+  // Jump into the scheduler, never to return.
+  #ifdef CS333_P3P4
+  statelist_move_from_to(proc->state, ZOMBIE, proc);
+  #else
+  proc->state = ZOMBIE;
+  #endif
+  sched();
+  panic("zombie exit");
 }
 #endif
 
@@ -355,8 +397,42 @@ wait(void)
 int
 wait(void)
 {
+  struct proc *p;
+  int havekids, pid;
 
-  return 0;  // placeholder
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for zombie children.
+    havekids = 0;
+    for(p = ptable.pLists.zombie; p; p = p->next) {
+      if(p->parent != proc)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        statelist_move_from_to(ZOMBIE, UNUSED, p);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || proc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(proc, &ptable.lock);  //DOC: wait-sleep
+  }
 }
 #endif
 
@@ -425,7 +501,6 @@ scheduler(void)
     sti();
 
     idle = 1;  // assume idle unless we schedule a process
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     p = ptable.pLists.ready;
     if(p) {
@@ -485,6 +560,7 @@ sched(void)
 void
 yield(void)
 {
+
   acquire(&ptable.lock);  //DOC: yieldlock
   #ifdef CS333_P3P4
     statelist_move_from_to(RUNNING, RUNNABLE, proc);
@@ -524,7 +600,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   if(proc == 0)
-    panic("sleep");
+    panic("sleep\n");
 
   // Must acquire ptable.lock in order to
   // change p->state and then call sched.
@@ -575,6 +651,8 @@ wakeup1(void *chan)
 {
  struct proc * p = ptable.pLists.sleep;
  struct proc * tmp;
+ if (!holding(&ptable.lock))
+   panic("not holding ptable.lock in wakeup1() (proc.c)\n");
 
  while (p) {
    tmp = p;
@@ -621,8 +699,24 @@ kill(int pid)
 int
 kill(int pid)
 {
+  struct proc *p;
 
-  return 0;  // placeholder
+  acquire(&ptable.lock);
+
+  p = statelist_search(pid);
+
+  if(p){
+    p->killed = 1;
+    // Wake process from sleep if necessary.
+    if(p->state == SLEEPING)
+      statelist_move_from_to(SLEEPING, RUNNABLE, p);
+    release(&ptable.lock);
+    return 0;
+  }
+
+  release(&ptable.lock);
+
+  return -1;
 }
 #endif
 
@@ -867,7 +961,7 @@ statelist_move_from_to(enum procstate state_from, enum procstate state_to, struc
   p->state = state_to;
 
   if (lock) release(&ptable.lock);
-  cprintf("exiting statelist_move_from_to.\n");
+  cprintf("exiting statelist_move_from_to. %s from %s to %s\n", p->name, states[state_from], states[state_to]);
 }
 
 static void
@@ -902,6 +996,30 @@ get_head_tail(struct proc*** head, struct proc*** tail, enum procstate state_fro
   }
 }
 
+static struct proc*
+statelist_search(int pid) {
+  struct proc * p;
+  for (int i = 0; i <= ZOMBIE; ++i) {
+    p = list_search(pid, i);
+    if (p) return p;
+  }
+  return 0;
+}
+
+static struct proc*
+list_search(int pid, enum procstate state) {
+  struct proc **head, **tail, *p;
+
+  get_head_tail(&head, &tail, state);
+  p = *head;
+  while (p) {
+    if (p->pid == pid) return p;
+    p = p->next;
+  }
+
+  return 0;
+}
+
 static void
 assertState(struct proc* p, enum procstate state) {
   if (!p) 
@@ -910,6 +1028,75 @@ assertState(struct proc* p, enum procstate state) {
     cprintf("proc state: %s, asserted state: %s\n", states[p->state], states[state]);
     panic("in proc.c: in assertState(): proc state does not match asserted state\n");
   }
+}
+
+static void
+statelist_abandon_children(struct proc* p) {
+  for (int i = 0; i <= ZOMBIE; ++i)
+    list_abandon_children(p, i);
+}
+
+static void
+list_abandon_children(struct proc* parent, enum procstate state) {
+  struct proc **head, **tail, *p;
+
+  get_head_tail(&head, &tail, state);
+  p = *head;
+  while (p) {
+    if (p->parent == parent) {
+      p->parent = initproc;
+      if (p->state == ZOMBIE)
+        wakeup1(initproc);
+    }
+    p = p->next;
+  }
+}
+
+static void
+list_display(struct proc* p) {
+  if (!p) return;
+
+  cprintf("\n%d", p->pid);
+  p = p->next;
+  while (p) {
+  cprintf("->%d", p->pid);
+  p = p->next;
+  }
+  cprintf("\n");
+}
+  
+void
+display_readylist() {
+  list_display(ptable.pLists.ready);
+}
+
+void
+display_freelist() {
+  int i;
+  struct proc* p = ptable.pLists.free;
+
+  for(i = 0; p;++i)
+    p = p->next
+
+  cprintf("Free List Size: %d processes", i);
+}
+
+void
+display_sleeplist() {
+  list_display(ptable.pLists.sleep);
+}
+
+void
+display_zombielist() {
+  if (!p) return;
+
+  cprintf("\n(%d,%d)", p->pid, (p->parent)? p->parent->pid : p->pid);
+  p = p->next;
+  while (p) {
+  cprintf("->(%d,%d)", p->pid, (p->parent)? p->parent->pid : p->pid);
+  p = p->next;
+  }
+  cprintf("\n");
 }
 
 #endif // CS333_P3P4

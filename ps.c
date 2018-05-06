@@ -42,7 +42,6 @@ main(void)
       printf(1,"0");
 
     printf(1,"%d\t", millisec);
-//    print_millisec(begin->CPU_total_ticks);
     millisec = begin->CPU_total_ticks;
     printf(1,"%d.", millisec /1000);
 

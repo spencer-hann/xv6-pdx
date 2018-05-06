@@ -210,6 +210,20 @@ consoleintr(int (*getc)(void))
         consputc(BACKSPACE);
       }
       break;
+    #ifdef CS333_P3P4
+    case C('R'):
+      display_readylist();
+      break;
+    case C('F');
+      display_freelist();
+      break;
+    case C('S'):
+      display_sleeplist();
+      break;
+    case C('Z');
+      display_zombielist();
+      break;
+    #endif
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;

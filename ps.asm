@@ -181,7 +181,6 @@ main(void)
  17f:	6a 01                	push   $0x1
  181:	e8 c2 05 00 00       	call   748 <printf>
  186:	83 c4 10             	add    $0x10,%esp
-//    print_millisec(begin->CPU_total_ticks);
     millisec = begin->CPU_total_ticks;
  189:	8b 45 e4             	mov    -0x1c(%ebp),%eax
  18c:	8b 40 14             	mov    0x14(%eax),%eax
