@@ -93,3 +93,4 @@ testSched.c
 testuidgid.c
 ps-test.c
 uproc.h
+p3-test.c

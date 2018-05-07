@@ -689,7 +689,6 @@ main(void)
      5a9:	83 ec 14             	sub    $0x14,%esp
   static char buf[100];
   int fd;
-  
   // Assumes three file descriptors open.
   while((fd = open("console", O_RDWR)) >= 0){
      5ac:	eb 16                	jmp    5c4 <main+0x29>
@@ -703,10 +702,10 @@ main(void)
      5bf:	83 c4 10             	add    $0x10,%esp
       break;
      5c2:	eb 1b                	jmp    5df <main+0x44>
+main(void)
 {
   static char buf[100];
   int fd;
-  
   // Assumes three file descriptors open.
   while((fd = open("console", O_RDWR)) >= 0){
      5c4:	83 ec 08             	sub    $0x8,%esp

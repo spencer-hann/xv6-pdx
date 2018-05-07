@@ -1,6 +1,13 @@
 // Segments in proc->gdt.
 #define NSEGS     7
 
+#ifdef CS333_P3P4
+void display_readylist();
+void display_freelist();
+void display_sleeplist();
+void display_zombielist();
+#endif
+
 // Per-CPU state
 struct cpu {
   uchar id;                    // Local APIC ID; index into cpus[] below

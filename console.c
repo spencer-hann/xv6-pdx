@@ -190,6 +190,9 @@ void
 consoleintr(int (*getc)(void))
 {
   int c, doprocdump = 0;
+  #ifdef CS333_P3P4
+  int rl = 0, fl = 0, sl = 0, zl = 0;
+  #endif
 
   acquire(&cons.lock);
   while((c = getc()) >= 0){
@@ -212,16 +215,16 @@ consoleintr(int (*getc)(void))
       break;
     #ifdef CS333_P3P4
     case C('R'):
-      display_readylist();
+      rl = 1;
       break;
-    case C('F');
-      display_freelist();
+    case C('F'):
+      fl = 1;
       break;
     case C('S'):
-      display_sleeplist();
+      sl = 1;
       break;
-    case C('Z');
-      display_zombielist();
+    case C('Z'):
+      zl = 1;
       break;
     #endif
     default:
@@ -241,6 +244,16 @@ consoleintr(int (*getc)(void))
   if(doprocdump) {
     procdump();  // now call procdump() wo. cons.lock held
   }
+  #ifdef CS333_P3P4
+  else if (rl)
+    display_readylist();
+  else if (fl)
+    display_freelist();
+  else if (sl)
+    display_sleeplist();
+  else if (zl)
+    display_zombielist();
+  #endif
 }
 
 int
